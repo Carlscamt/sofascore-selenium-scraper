@@ -112,7 +112,10 @@ def process_date(date_str):
                 'home_avg_rating': None, 'home_position': None, 'home_form': None,
                 'away_avg_rating': None, 'away_position': None, 'away_form': None,
                 'h2h_home_wins': None, 'h2h_away_wins': None, 'h2h_draws': None,
-                'lineups': [] # Skipping detailed lineups parsing for speed unless trivial
+                'home_total_market_value': None, 'away_total_market_value': None,
+                'home_avg_height': None, 'away_avg_height': None,
+                'home_defenders': 0, 'home_midfielders': 0, 'home_forwards': 0,
+                'away_defenders': 0, 'away_midfielders': 0, 'away_forwards': 0
             }
             
             event_id = event['id']
@@ -153,13 +156,133 @@ def process_date(date_str):
                 row['away_position'] = at.get('position')
                 row['away_form'] = ','.join(at.get('form', []))
 
-            # 3. H2H
-            h2h_data = fetch_json_content(driver, f"https://www.sofascore.com/api/v1/event/{event_id}/h2h")
-            if h2h_data:
-                td = h2h_data.get('teamDuel', {})
-                row['h2h_home_wins'] = td.get('homeWins')
-                row['h2h_away_wins'] = td.get('awayWins')
-                row['h2h_draws'] = td.get('draws')
+            # 3. H2H - Use /h2h/events endpoint with customId (works with /h2h/events)
+            # The customId field (e.g. 'OdbsMeb') is required for the /h2h/events endpoint
+            custom_id = event.get('customId')
+            h2h_data = None
+            
+            # Use customId with /h2h/events endpoint (the new API format)
+            if custom_id:
+                h2h_data = fetch_json_content(driver, f"https://www.sofascore.com/api/v1/event/{custom_id}/h2h/events")
+            
+            # Fallback to /h2h endpoint with numeric ID (returns aggregate counts only)
+            if not h2h_data or 'events' not in h2h_data:
+                # Try the aggregate h2h endpoint as fallback (less precise but works)
+                h2h_fallback = fetch_json_content(driver, f"https://www.sofascore.com/api/v1/event/{event_id}/h2h")
+                if h2h_fallback and 'teamDuel' in h2h_fallback:
+                    td = h2h_fallback.get('teamDuel', {})
+                    row['h2h_home_wins'] = td.get('homeWins', 0)
+                    row['h2h_away_wins'] = td.get('awayWins', 0)
+                    row['h2h_draws'] = td.get('draws', 0)
+            
+            if h2h_data and 'events' in h2h_data:
+                # Get team IDs from current event
+                home_team_id = event.get('homeTeam', {}).get('id')
+                away_team_id = event.get('awayTeam', {}).get('id')
+                
+                h2h_home_wins = 0
+                h2h_away_wins = 0
+                h2h_draws = 0
+                seen_ids = set()  # Track seen event IDs to avoid duplicates
+                
+                # Get current event timestamp
+                current_start_time = event.get('startTimestamp')
+                
+                for h2h_event in h2h_data['events']:
+                    h2h_event_id = h2h_event.get('id', float('inf'))
+                    h2h_start_time = h2h_event.get('startTimestamp')
+                    
+                    # CRITICAL: Filter using START TIMESTAMP if available (more reliable than ID)
+                    # We only want matches that strictly started BEFORE the current match
+                    if current_start_time and h2h_start_time:
+                        if h2h_start_time >= current_start_time:
+                            continue
+                    else:
+                        # Fallback to ID filtering if timestamps are missing (less reliable)
+                        if h2h_event_id >= event_id:
+                            continue
+                    
+                    # Skip non-finished matches
+                    if h2h_event.get('status', {}).get('type') != 'finished':
+                        continue
+                    
+                    # Skip duplicates
+                    if h2h_event_id in seen_ids:
+                        continue
+                    seen_ids.add(h2h_event_id)
+                    
+                    winner_code = h2h_event.get('winnerCode')
+                    h2h_home_id = h2h_event.get('homeTeam', {}).get('id')
+                    h2h_away_id = h2h_event.get('awayTeam', {}).get('id')
+                    
+                    if winner_code == 1:  # Home won in h2h event
+                        if h2h_home_id == home_team_id:
+                            h2h_home_wins += 1
+                        elif h2h_home_id == away_team_id:
+                            h2h_away_wins += 1
+                    elif winner_code == 2:  # Away won in h2h event
+                        if h2h_away_id == home_team_id:
+                            h2h_home_wins += 1
+                        elif h2h_away_id == away_team_id:
+                            h2h_away_wins += 1
+                    elif winner_code == 3:  # Draw
+                        h2h_draws += 1
+                
+                row['h2h_home_wins'] = h2h_home_wins
+                row['h2h_away_wins'] = h2h_away_wins
+                row['h2h_draws'] = h2h_draws
+
+            # 4. LINEUPS & PLAYERS
+            lineups_data = fetch_json_content(driver, f"https://www.sofascore.com/api/v1/event/{event_id}/lineups")
+            if lineups_data:
+                for side in ['home', 'away']:
+                    team_players = lineups_data.get(side, {}).get('players', [])
+                    market_values = []
+                    heights = []
+                    defenders = 0
+                    midfielders = 0
+                    forwards = 0
+                    
+                    for p in team_players:
+                        player = p.get('player', {})
+                        
+                        # Market Value
+                        mv = player.get('marketValue')
+                        if mv is None:
+                            # Try raw structure
+                            raw_mv = player.get('proposedMarketValueRaw')
+                            if isinstance(raw_mv, dict):
+                                mv = raw_mv.get('value')
+                        if mv:
+                            market_values.append(mv)
+                            
+                        # Height
+                        h = player.get('height')
+                        if h:
+                            heights.append(h)
+                            
+                        # Position
+                        pos = player.get('position')
+                        if pos == 'D': defenders += 1
+                        elif pos == 'M': midfielders += 1
+                        elif pos == 'F': forwards += 1
+                    
+                    # Aggregates
+                    total_mv = sum(market_values) if market_values else 0
+                    avg_height = sum(heights) / len(heights) if heights else 0
+                    
+                    if side == 'home':
+                        row['home_total_market_value'] = total_mv
+                        row['home_avg_height'] = round(avg_height, 2)
+                        row['home_defenders'] = defenders
+                        row['home_midfielders'] = midfielders
+                        row['home_forwards'] = forwards
+                    else:
+                        row['away_total_market_value'] = total_mv
+                        row['away_avg_height'] = round(avg_height, 2)
+                        row['away_defenders'] = defenders
+                        row['away_midfielders'] = midfielders
+                        row['away_forwards'] = forwards
 
             results.append(row)
             
@@ -207,7 +330,7 @@ def main():
         df = pd.DataFrame(all_data)
         # Drop duplicates just in case
         df = df.drop_duplicates(subset=['id'])
-        filename = "sofascore_large_dataset.csv"
+        filename = "sofascore_dataset_v2.csv"
         df.to_csv(filename, index=False)
         print(f"\n[SAVE] SAVED {len(df)} matches to {filename}")
     else:

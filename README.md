@@ -1,74 +1,92 @@
-# Football Match Predictor & Betting Bot 🤖⚽
+# Sofascore Football Prediction System
 
-A complete end-to-end machine learning system for predicting football matches and identifying value bets.
+A comprehensive football match prediction and value betting system using machine learning.
 
-## 🚀 Overview
-This project consists of 4 main components working together to beat the bookmakers:
-1.  **Data Collector**: High-speed, multi-threaded Selenium scraper to build a large historical dataset.
-2.  **ML Engine**: XGBoost model that learns from historical data to predict match outcomes.
-3.  **Future Scraper**: Targeted scraper to fetch odds and stats for upcoming matches (next 3-5 days).
-4.  **Prediction Dashboard**: Interactive Streamlit app to visualize predictions and find the best bets.
+## 📁 Project Structure
 
----
-
-## 🛠️ Installation
-
-### Prerequisites
-*   Python 3.8+
-*   Google Chrome (installed)
-
-### Install Dependencies
-```bash
-pip install pandas selenium webdriver-manager xgboost scikit-learn matplotlib streamlit
+```
+sofascore-selenium-scraper/
+├── scrapers/              # Data collection scripts
+│   ├── sofascore_scraper.py    # Main historical data scraper
+│   └── future_scraper.py       # Upcoming matches scraper
+│
+├── models/                # Machine learning models
+│   ├── ml_model.py            # Main XGBoost model
+│   ├── ml_model_fixed.py      # Fixed version with H2H
+│   ├── ml_no_h2h.py           # Baseline model without H2H
+│   └── run_full_model.py      # Full model training script
+│
+├── analysis/              # Backtesting & analysis scripts
+│   ├── backtest_split.py           # Train/test split backtest
+│   ├── bankroll_backtest.py        # 2% bankroll management test
+│   ├── all_strategies_bankroll.py  # All strategies with bankroll
+│   ├── strategy_backtest.py        # Strategy comparison
+│   ├── strategy_explorer.py        # Deep strategy analysis
+│   ├── performance_report.py       # Performance dashboard
+│   ├── feature_importance_report.py # Feature analysis
+│   └── test_betting_strategies.py  # Strategy testing
+│
+├── data/                  # CSV datasets
+│   ├── sofascore_dataset_v2.csv         # Latest with lineup features
+│   ├── sofascore_large_dataset.csv      # Large historical dataset
+│   ├── sofascore_future_matches.csv     # Upcoming matches
+│   └── ...other CSV files
+│
+├── reports/               # Generated charts & visualizations
+│   ├── all_strategies_bankroll.png
+│   ├── strategy_backtest_report.png
+│   ├── feature_importance_report.png
+│   └── ...other PNG reports
+│
+├── debug/                 # Debug & testing scripts
+│   ├── debug_h2h_scraper.py
+│   ├── debug_lineups_scraper.py
+│   ├── check_leakage.py
+│   └── ...other test files
+│
+├── app.py                 # Streamlit web dashboard
+└── README.md
 ```
 
----
+## 🚀 Quick Start
 
-## ⚡ Usage Guide
-
-### Step 1: Build the Database
-Run the high-performance scraper to collect historical data (last ~6 months).
-> *Note: This opens 4 headless Chrome workers to speed up collection.*
+### 1. Scrape Data
 ```bash
+cd scrapers
 python sofascore_scraper.py
 ```
-*   **Output**: `sofascore_large_dataset.csv` (~600+ matches)
 
-### Step 2: Update Upcoming Matches
-Fetch the latest schedule, odds, and pre-match stats for the next few days.
+### 2. Train Model
 ```bash
-python future_scraper.py
+cd models
+python run_full_model.py
 ```
-*   **Output**: `sofascore_future_matches.csv`
 
-### Step 3: Launch the Dashboard
-Open the interactive app to view predictions and betting advice.
+### 3. Run Backtest
 ```bash
-python -m streamlit run app.py
+cd analysis
+python all_strategies_bankroll.py
 ```
-*   **Features**:
-    *   **Live Training**: Retrains the model on your latest data instantly.
-    *   **Value Finder**: Highlights bets with positive Expected Value (EV).
-    *   **Filters**: Filter by League, Confidence, or EV.
 
----
+## 📊 Features
 
-## 📊 File Structure
+- **Lineup Features**: Market value, height, position counts
+- **H2H Data**: Historical head-to-head records
+- **Multiple Strategies**: Favorites, Value Hunter, Conservative, etc.
+- **Bankroll Management**: 2% stake simulation
 
-| File | Description |
-| :--- | :--- |
-| `sofascore_scraper.py` | **Historical Scraper**. Multi-threaded. Collects 1000+ past matches. |
-| `future_scraper.py` | **Future Scraper**. Collects upcoming scheduled matches for prediction. |
-| `ml_model.py` | **Analytics Core**. Contains the XGBoost model, Cross-Validation logic, and Strategy Backtesting. |
-| `app.py` | **Frontend**. Streamlit dashboard for user interaction. |
-| `check_leakage.py` | **Verification Tool**. Checks for data leakage to ensure model integrity. |
+## 📈 Latest Results (80/20 Split, 2% Stakes)
 
----
+| Strategy | ROI |
+|----------|-----|
+| Favorites (Odds < 1.5) | -1.33% |
+| Value Hunter (EV > 10%) | -3.85% |
+| Base Case (All +EV) | -7.19% |
 
-## 📈 Performance (Backtest)
-Based on a 5-Fold Cross-Validation of 600+ matches:
-*   **Base Strategy**: 55% ROI
-*   **Conservative Strategy (>60% Prob)**: 66% ROI
-*   **Longshot Strategy (>3.0 Odds)**: 121% ROI
+*Note: More data needed to achieve profitability*
 
-*> Note: Past performance does not guarantee future results. Always gamble responsibly.*
+## 🔧 Requirements
+
+- Python 3.11+
+- selenium, pandas, numpy, xgboost, matplotlib
+- Chrome/ChromeDriver

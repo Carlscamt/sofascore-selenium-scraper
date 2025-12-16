@@ -71,6 +71,10 @@ def feature_engineering(df):
         'home_avg_rating', 'away_avg_rating',
         'home_position', 'away_position',
         'h2h_home_wins', 'h2h_away_wins', 'h2h_draws',
+        'home_total_market_value', 'away_total_market_value',
+        'home_avg_height', 'away_avg_height',
+        'home_defenders', 'home_midfielders', 'home_forwards',
+        'away_defenders', 'away_midfielders', 'away_forwards',
         'league_encoded'
     ]
     
