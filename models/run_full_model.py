@@ -60,8 +60,13 @@ def feature_engineering_full(df):
         'home_avg_height', 'away_avg_height',
         'home_defenders', 'home_midfielders', 'home_forwards',
         'away_defenders', 'away_midfielders', 'away_forwards',
-        'league_encoded'
+        'league_encoded',
+        'odd_btts_yes', 'odd_btts_no'
     ]
+    
+    # Add Streak Features dynamically
+    streak_cols = [c for c in df_clean.columns if c.startswith('streak_')]
+    features.extend(streak_cols)
     
     df_clean[features] = df_clean[features].fillna(-1) 
     df_clean = df_clean.reset_index(drop=True)
