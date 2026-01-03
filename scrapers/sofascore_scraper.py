@@ -12,7 +12,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import WebDriverException
 
 # --- Configuration ---
-MAX_WORKERS = 5          # Number of parallel browsers
+MAX_WORKERS = 5            # Number of parallel browsers
 TARGET_MATCHES = 1300    # Goal
 DAYS_TO_CHECK = 200      # Look back approx 6 months
 # ---------------------
@@ -49,140 +49,13 @@ def initialize_driver():
         print(f"   [Error] Driver Init Failed: {e}")
         return None
 
-def fetch_json_content(driver, url, retries=2):
-    """Robust JSON fetcher from <pre> tag."""
-    for attempt in range(retries + 1):
-        try:
-            driver.get(url)
-            # Fast check for pre tag
-            elems = driver.find_elements(By.TAG_NAME, "pre")
-            if elems:
-                return json.loads(elems[0].text)
-        except Exception:
-            pass
-        time.sleep(random.uniform(0.5, 1.5)) # Tiny randomized wait
-    return None
+from utils import (
+    fetch_json_content, 
+    process_complex_odds, 
+    process_match_statistics, 
+    process_streaks
+)
 
-def convert_fractional(frac_str):
-    """Converts '8/13' to 1.615."""
-    try:
-        if '/' in frac_str:
-            num, den = map(int, frac_str.split('/'))
-            return round(1 + (num / den), 3)
-        return float(frac_str)
-    except:
-        return None
-
-def process_complex_odds(driver, event_id):
-    """
-    Fetches advanced odds (BTTS, etc.) from odds/1/all.
-    Returns dict with flattened odds keys.
-    """
-    odds_data = {}
-    url = f"https://www.sofascore.com/api/v1/event/{event_id}/odds/1/all"
-    data = fetch_json_content(driver, url)
-    if not data: return odds_data
-    
-    markets = data.get('markets', [])
-    for market in markets:
-        # Market ID 5 = Both teams to score
-        if market.get('marketId') == 5:
-            for choice in market.get('choices', []):
-                name = choice.get('name', '').lower()
-                frac = choice.get('fractionalValue')
-                decimal = convert_fractional(frac)
-                
-                if name == 'yes':
-                    odds_data['odd_btts_yes'] = decimal
-                elif name == 'no':
-                    odds_data['odd_btts_no'] = decimal
-                    
-    return odds_data
-
-
-import re
-
-def slugify(text):
-    """Converts 'More than 2.5 goals' to 'more_than_2_5_goals'."""
-    text = text.lower()
-    text = re.sub(r'[^a-z0-9]+', '_', text)
-    return text.strip('_')
-
-def parse_streak_value(val_str):
-    """
-    Parses streak value string (e.g. '3' or '6/7').
-    Returns dict with count, sample, pct.
-    """
-    try:
-        if '/' in str(val_str):
-            parts = str(val_str).split('/')
-            count = int(parts[0])
-            sample = int(parts[1])
-            pct = round(count / sample, 3) if sample > 0 else 0.0
-        else:
-            # Just a number like "3"
-            count = int(val_str)
-            sample = count # Implied sample is the streak itself
-            pct = 1.0
-            
-        return {
-            'count': count,
-            'sample': sample,
-            'pct': pct
-        }
-    except Exception as e:
-        return None
-
-def process_streaks(driver, event_id):
-    """
-    Fetches and processes team streaks data.
-    Returns a dictionary of flattened columns.
-    """
-    streaks_data = {}
-    url = f"https://www.sofascore.com/api/v1/event/{event_id}/team-streaks"
-    
-    data = fetch_json_content(driver, url)
-    if not data:
-        return streaks_data
-        
-    # Process General Streaks
-    if 'general' in data:
-        for item in data['general']:
-            name = item.get('name', '')
-            val_str = item.get('value', '')
-            team = item.get('team', '') # home, away, both
-            
-            parsed = parse_streak_value(val_str)
-            if not parsed:
-                continue
-                
-            slug = slugify(name)
-            base_col = f"streak_{team}_{slug}"
-            
-            streaks_data[f"{base_col}_count"] = parsed['count']
-            streaks_data[f"{base_col}_len"] = parsed['sample'] # Rename sample to len for clarity? Or keep sample.
-            streaks_data[f"{base_col}_pct"] = parsed['pct']
-            
-    # Process Head2Head Streaks
-    if 'head2head' in data:
-        for item in data['head2head']:
-            name = item.get('name', '')
-            val_str = item.get('value', '')
-            team = item.get('team', '')
-            
-            parsed = parse_streak_value(val_str)
-            if not parsed:
-                continue
-                
-            slug = slugify(name)
-            # Prefix with h2h explicitly
-            base_col = f"streak_h2h_{team}_{slug}"
-            
-            streaks_data[f"{base_col}_count"] = parsed['count']
-            streaks_data[f"{base_col}_len"] = parsed['sample']
-            streaks_data[f"{base_col}_pct"] = parsed['pct']
-            
-    return streaks_data
 
 def process_date(date_str):
     """
@@ -405,6 +278,7 @@ def process_date(date_str):
                         row['away_midfielders'] = midfielders
                         row['away_forwards'] = forwards
 
+
             # 5. TEAM STREAKS
             try:
                 streaks_data = process_streaks(driver, event_id)
@@ -413,9 +287,18 @@ def process_date(date_str):
             except Exception as e:
                 pass # Fail silently for streaks, not critical
 
-            # 6. COMPLEX ODDS (BTTS, etc.)
+            # 6. MATCH STATISTICS (NEW)
+            try:
+                stats_data = process_match_statistics(driver, event_id)
+                if stats_data:
+                    row.update(stats_data)
+            except Exception as e:
+                pass 
+
+            # 7. COMPLEX ODDS (BTTS, etc.)
             try:
                 complex_odds = process_complex_odds(driver, event_id)
+
                 if complex_odds:
                     row.update(complex_odds)
             except Exception as e:

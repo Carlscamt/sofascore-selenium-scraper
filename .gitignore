@@ -1,6 +1,60 @@
-__pycache__/
-*.png
-.streamlit/
 
-# Data
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+.env
+.venv
+env/
+ENV/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# VS Code
+.vscode/
+
+# Project Data (Large Files)
 *.csv
+*.xlsx
+*.json
+*.pkl
+data/
+sofascore_combined.csv
+sofascore_combined_enriched.csv
+dataset_rolling_features*.csv
+
+# Reports (Generated)
+reports/*.png
+*.png
+logs/
+debug/
+
+# Secrets
+secrets.py
+config_private.py
+
+# OS
+.DS_Store
+Thumbs.db
